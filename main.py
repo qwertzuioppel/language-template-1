@@ -11,6 +11,8 @@ NT_MUL = "MULTIPLY"
 NT_SUB = "SUBTRACT"
 NT_DIV = "DIVIDE"
 NT_MOD = "MODULO"
+NT_LPAREN = "LPAREN"
+NT_RPAREN = "RPAREN"
 
 UN_NODES = [
 	NT_VAR,
@@ -157,6 +159,8 @@ def lexer(string):
 	while string:
 		curr = string[0]
 		if curr in "\n\t ":pass
+		elif False: 
+			pass
 		elif curr in "123456789":
 			res = ""
 			while string and string[0] in "0123456789":
@@ -165,6 +169,10 @@ def lexer(string):
 				string = string[1:]
 			tokens.append(Node(NT_EXPR, left=Node(NT_ATOM, left=int(res))))
 			continue
+		elif curr == "(":
+			tokens.append(Node(NT_LPAREN))
+		elif curr == ")":
+			tokens.append(Node(NT_RPAREN))
 		elif curr=="=":
 			tokens.append(Node(NT_ASSIGN, left=-1, right=-1))
 		elif curr==";":
@@ -185,94 +193,89 @@ def lexer(string):
 		string = string[1:]
 	return tokens + [Node(NT_NONE)]*(tokens[-1].type == NT_FWD)
 
+
+# Parser rekursiv machen
 def parse(tokens):
-	while len(tokens)>1:
-		debug.log([str(i)for i in tokens])
-		binds = [None for i in tokens]
-		for i in range(len(tokens)):
-			if i==0:
-				prev = Node(NT_NONE)
+	def parse_expr(tokens, i=0):
+		out = []
+		while i < len(tokens):
+			tok = tokens[i]
+			if tok.type == NT_LPAREN:
+				subexpr, i = parse_expr(tokens, i + 1)
+				out.append(Node(NT_EXPR, left=subexpr))
+			elif tok.type == NT_RPAREN:
+				break
 			else:
-				prev = tokens[i-1]
-			if i==len(tokens)-1:
-				nxt = Node(NT_NONE)
-			else:
-				nxt = tokens[i+1]
-			curr = tokens[i]
-			if not (nxt.type in LBIND.keys() or prev.type in RBIND.keys()):
-				continue
-			if not nxt.type in LBIND.keys():
-				nxtval = -1
-			else: nxtval = LBIND[nxt.type]
-			if not prev.type in RBIND.keys():
-				prevval= -1
-			else: prevval = RBIND[prev.type]
-			binds[i] = prevval==max(prevval, nxtval) # true if it binds to the left
-		newtokens = []	
-		debug.log(binds)
-		for i in range(len(tokens)):
-			if i==0:
-				prev=None
-			else:
-				prev=binds[i-1]
-			curr=binds[i]
-			if i==len(binds)-1:
-				nxt = None
-			else:
-				nxt=binds[i+1]
-			if curr == True or curr == False:
-				continue
-			left = (not(tokens[i].type in LBIND.keys()) or prev==False)
-			right= (not(tokens[i].type in RBIND.keys()) or nxt==True)
-			if left and right:
-				if tokens[i].type in LBIND.keys():
-					leftnode = tokens[i-1]
+				out.append(tok)
+			i += 1
+		return reduce_expr(out), i
+
+	def reduce_expr(tokens):
+		while len(tokens)>1:
+			debug.log([str(i)for i in tokens])
+			binds = [None for i in tokens]
+			for i in range(len(tokens)):
+				if i==0:
+					prev = Node(NT_NONE)
 				else:
-					leftnode= None
-				if tokens[i].type in RBIND.keys():
-					rightnode= tokens[i+1]
-				else:rightnode=None
-				newtokens.append(Node(NT_EXPR, left=Node(tokens[i].type,left=leftnode,right=rightnode)))
-			else:
-				if prev==False:
-					newtokens.append(tokens[i-1])
-				newtokens.append(tokens[i])
-				if nxt == True:
-					newtokens.append(tokens[i+1])
-		tokens = newtokens
-	return tokens[0]
+					prev = tokens[i-1]
+				if i==len(tokens)-1:
+					nxt = Node(NT_NONE)
+				else:
+					nxt = tokens[i+1]
+				curr = tokens[i]
+				if not (nxt.type in LBIND.keys() or prev.type in RBIND.keys()):
+					continue
+				if not nxt.type in LBIND.keys():
+					nxtval = -1
+				else: nxtval = LBIND[nxt.type]
+				if not prev.type in RBIND.keys():
+					prevval= -1
+				else: prevval = RBIND[prev.type]
+				binds[i] = prevval==max(prevval, nxtval) # true if it binds to the left
+			newtokens = []	
+			debug.log(binds)
+			for i in range(len(tokens)):
+				if i==0:
+					prev=None
+				else:
+					prev=binds[i-1]
+				curr=binds[i]
+				if i==len(binds)-1:
+					nxt = None
+				else:
+					nxt=binds[i+1]
+				if curr == True or curr == False:
+					continue
+				left = (not(tokens[i].type in LBIND.keys()) or prev==False)
+				right= (not(tokens[i].type in RBIND.keys()) or nxt==True)
+				if left and right:
+					if tokens[i].type in LBIND.keys():
+						leftnode = tokens[i-1]
+					else:
+						leftnode= None
+					if tokens[i].type in RBIND.keys():
+						rightnode= tokens[i+1]
+					else:rightnode=None
+					newtokens.append(Node(NT_EXPR, left=Node(tokens[i].type,left=leftnode,right=rightnode)))
+				else:
+					if prev==False:
+						newtokens.append(tokens[i-1])
+					newtokens.append(tokens[i])
+					if nxt == True:
+						newtokens.append(tokens[i+1])
+			tokens = newtokens
+		return tokens[0]
+
+
+	tree, _ = parse_expr(tokens)
+	return tree
 
 
 
 
 
 def main():
-	"""
-	# x = 3
-	# y = 4
-	# z = x
-
-	xval = Node(NT_ATOM, left=3)
-	xexpr= Node(NT_EXPR, left=xval)
-	xname= Node(NT_VAR, left="x")
-	xasgn= Node(NT_ASSIGN, left=xname, right=xexpr)
-
-	yval = Node(NT_ATOM, left=4)
-	yname= Node(NT_VAR, left="y")
-	yexpr= Node(NT_EXPR, left=yval)
-	yasgn= Node(NT_ASSIGN, left=yname, right=yexpr)
-
-	zval = Node(NT_VAR, left="x")
-	zname= Node(NT_VAR, left="z")
-	zexpr= Node(NT_EXPR, left=zval)
-	zasgn= Node(NT_ASSIGN, left=zname, right=zexpr)
-
-	_1 = Node(NT_FWD, left=xasgn, right=yasgn)
-	_2 = Node(NT_FWD, left=_1, right=zasgn)	
-
-	_2.run()
-	print(_2.state)
-	"""
 	state = dict([])
 	while True:
 		_1 = lexer(input("> "))
